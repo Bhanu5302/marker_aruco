@@ -24,8 +24,8 @@ class image_converter:
         self.image_pub = rospy.Publisher("between_image", Image, queue_size=10)
         self.between_pub = rospy.Publisher("output_point", PoseStamped, queue_size=10)
         self.bridge = CvBridge()
-        self.calibrate_camera = rospy.Subscriber("/zed2/zed_node/left/camera_info", CameraInfo, self.callbackCalibrate)
-        self.image_sub = rospy.Subscriber("/zed2/zed_node/left_raw/image_raw_gray", Image, self.callback)
+        self.calibrate_camera = rospy.Subscriber("/zed2i/zed_nodelet/left/camera_info", CameraInfo, self.callbackCalibrate)
+        self.image_sub = rospy.Subscriber("/zed2i/zed_nodelet/left_raw/image_raw_gray", Image, self.callback)
 
     def callback(self, data):
 
@@ -220,7 +220,7 @@ class image_converter:
 
 def main(args):
     global mode
-    mode = args[1]
+    mode = args[0]
     ic = image_converter()
     rospy.init_node('image_converter', anonymous=True)
     try:
