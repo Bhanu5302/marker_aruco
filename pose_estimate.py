@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
+#!/usr/bin/env python3
 from __future__ import print_function
 
 import sys
 import rospy
 import cv2
 import tf
+import time
+from rospy import Time 
+from tf import TransformBroadcaster
+from tf.transformations import euler_from_quaternion, quaternion_from_euler
 from geometry_msgs.msg import PoseStamped
 import numpy as np
 from std_msgs.msg import String
@@ -15,22 +20,22 @@ distortion_coefficients = []
 matrix_coefficients = []
 betweenPose = PoseStamped()
 postPose = PoseStamped()
-mode = "P"
-
-
+mode = "start"
+rot=[]
+rospy.init_node('aruco_moco', anonymous=True)
 class image_converter:
 
     def __init__(self):
         self.image_pub = rospy.Publisher("between_image", Image, queue_size=10)
         self.between_pub = rospy.Publisher("output_point", PoseStamped, queue_size=10)
         self.bridge = CvBridge()
-        self.calibrate_camera = rospy.Subscriber("/zed2i/zed_nodelet/left/camera_info", CameraInfo, self.callbackCalibrate)
-        self.image_sub = rospy.Subscriber("/zed2i/zed_nodelet/left_raw/image_raw_gray", Image, self.callback)
+        self.calibrate_camera = rospy.Subscriber("/zed/zed_node/left/camera_info", CameraInfo, self.callbackCalibrate)
+        self.image_sub = rospy.Subscriber("/zed/zed_node/left_raw/image_raw_gray", Image, self.callback)
 
     def callback(self, data):
 
         global distortion_coefficients
-        global matrix_coefficients
+        global matrix_coefficients,translation,rotation,rot
 
         try:
             cv_image = self.bridge.imgmsg_to_cv2(data, "bgr8")
@@ -78,7 +83,7 @@ class image_converter:
 
                 quaternion = tf.transformations.quaternion_from_matrix(rotation_matrix)
 
-                if mode == "P":
+                if mode == "start":
                     self.publishPostPose(tvec[0][0][0], tvec[0][0][1], tvec[0][0][2], quaternion[0], quaternion[1],
                                          quaternion[2], quaternion[3])
 
@@ -92,34 +97,24 @@ class image_converter:
                     orientationZ = quaternion[2] + orientationZ
                     orientationW = quaternion[3] + orientationW
 
-        #       cv2.imshow("Image window", cv_image)
-
-        if mode == "G":
-            self.publishGatePose(corners, positionX, positionY, positionZ, orientationX, orientationY, orientationZ,
-                                 orientationW)
-            if len(corners) > 1:
-                firstMarkerUpX = (corners[0][0][0][0] + corners[0][0][1][0]) / 2
-                firstMarkerUpY = (corners[0][0][0][1] + corners[0][0][1][1]) / 2
-
-                firstMarkerDownX = (corners[0][0][2][0] + corners[0][0][3][0]) / 2
-                firstMarkerDownY = (corners[0][0][2][1] + corners[0][0][3][1]) / 2
-
-                secondMarkerUpX = (corners[1][0][0][0] + corners[1][0][1][0]) / 2
-                secondMarkerUpY = (corners[1][0][0][1] + corners[1][0][1][1]) / 2
-
-                secondMarkerDownX = (corners[1][0][2][0] + corners[1][0][3][0]) / 2
-                secondMarkerDownY = (corners[1][0][2][1] + corners[1][0][3][1]) / 2
-
-                firstMarkerCenterX = (firstMarkerUpX + firstMarkerDownX) / 2
-                firstMarkerCenterY = (secondMarkerUpY + firstMarkerDownY) / 2
-
-                secondMarkerCenterX = (secondMarkerUpX + secondMarkerDownX) / 2
-                secondMarkerCenterY = (secondMarkerUpY + secondMarkerDownY) / 2
-
-                cv2.circle(cv_image, (int((firstMarkerCenterX + secondMarkerCenterX) / 2),
-                                      int((firstMarkerCenterY + secondMarkerCenterY) / 2)), 10, (0, 0, 255), -1)
-
+        cv2.imshow("Image window", cv_image)
+        translation = (positionX, positionY, positionZ)
+        rotation = [orientationX, orientationY, orientationZ, orientationW]
+        rotation = np.array(rotation)
+        # print(translation)
+        # print(rotation)  tf.transformations.quaternion_from_euler(0, 0, 1.0), 
+        b = TransformBroadcaster()
+        rot_eul= euler_from_quaternion(rotation)
+        # print(type(rot_eul))
+        quat = quaternion_from_euler (2.7, 0.0,0.2)
+        b.sendTransform(translation, tf.transformations.quaternion_from_euler(rot_eul[0], rot_eul[1], rot_eul[2]), Time.now(),'ar_frame','zed_left_camera_optical_frame')
+        
         self.drawMarker(corners, ids, cv_image=cv_image)
+        # print(type(rotation))
+        if ids is not None:
+            aruco_ids.publish(str(ids.tolist()))
+        else:
+            aruco_ids.publish(str([[]]))
 
     def publishPostPose(self, pX, pY, pZ, oX, oY, oZ, oW):
         global postPose
@@ -136,20 +131,6 @@ class image_converter:
 
         self.between_pub.publish(postPose)
 
-    def publishGatePose(self, corners, pX, pY, pZ, oX, oY, oZ, oW):
-        if len(corners) > 1:
-            global betweenPose
-            betweenPose = PoseStamped()
-            betweenPose.header.frame_id = "between_point"
-            betweenPose.pose.position.x = pZ / 2
-            betweenPose.pose.position.y = pX / 2
-            betweenPose.pose.position.z = pY / 2
-
-            betweenPose.pose.orientation.x = oX / 2
-            betweenPose.pose.orientation.y = oY / 2
-            betweenPose.pose.orientation.z = oZ / 2
-            betweenPose.pose.orientation.w = oW / 2
-            self.between_pub.publish(betweenPose)
 
     def drawMarker(self, corners, ids, cv_image):
         if len(corners) > 0:
@@ -174,7 +155,7 @@ class image_converter:
                             cv2.FONT_HERSHEY_SIMPLEX,
                             1, (0, 255, 0), 2)
 
-                #   cv2.imshow("Image window", cv_image)
+                cv2.imshow("Image window", cv_image)
         cv2.waitKey(3)
         try:
             self.image_pub.publish(self.bridge.cv2_to_imgmsg(cv_image, "bgr8"))
@@ -222,7 +203,6 @@ def main(args):
     global mode
     mode = args[0]
     ic = image_converter()
-    rospy.init_node('image_converter', anonymous=True)
     try:
         rospy.spin()
     except KeyboardInterrupt:
@@ -231,4 +211,9 @@ def main(args):
 
 
 if __name__ == '__main__':
-    main(sys.argv)
+    aruco_ids = rospy.Publisher('aruco_id_list', String,queue_size=2)
+    rate = rospy.Rate(5)
+    while not rospy.is_shutdown():
+        main(sys.argv)
+
+
