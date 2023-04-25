@@ -1,6 +1,4 @@
-
 #!/usr/bin/env python3
-from __future__ import print_function
 
 import sys
 import rospy
@@ -101,7 +99,7 @@ class image_converter:
         translation = (positionX, positionY, positionZ)
         rotation = [orientationX, orientationY, orientationZ, orientationW]
         rotation = np.array(rotation)
-        # print(translation)
+        print(translation)
         # print(rotation)  tf.transformations.quaternion_from_euler(0, 0, 1.0), 
         b = TransformBroadcaster()
         rot_eul= euler_from_quaternion(rotation)
@@ -215,5 +213,3 @@ if __name__ == '__main__':
     rate = rospy.Rate(5)
     while not rospy.is_shutdown():
         main(sys.argv)
-
-
